@@ -2,6 +2,7 @@ import 'dotenv/config';
 
 export const config = {
   port: Number(process.env.PORT || 3000),
+  corsOrigins: process.env.CORS_ORIGINS ?? '',
   database: process.env.DATABASE_URL
     ? { connectionString: process.env.DATABASE_URL }
     : {

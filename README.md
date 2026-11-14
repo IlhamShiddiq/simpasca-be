@@ -78,6 +78,29 @@ npm run dev
 
 Isi `.env` terlebih dahulu. Untuk mode tanpa watch: `npm start`. Jangan menjalankan API lokal dan API Docker pada port host yang sama secara bersamaan.
 
+## CORS
+
+Atur origin yang boleh mengakses API melalui browser di `.env`:
+
+```env
+# Izinkan semua origin
+CORS_ORIGINS=*
+```
+
+Atau gunakan allowlist (cocok untuk production):
+
+```env
+CORS_ORIGINS=https://simpasca.com,https://admin.simpasca.com,http://localhost:5173
+```
+
+Origin harus mencakup protokol dan port jika ada, tanpa path atau trailing slash. Jangan gabungkan `*` dengan daftar origin. Nilai tidak valid membuat startup gagal agar salah konfigurasi terlihat. Jika variabel kosong/tidak diisi, akses cross-origin browser tidak diizinkan; akses same-origin tetap berjalan.
+
+Middleware menangani preflight `OPTIONS` otomatis dan mengizinkan header request yang diminta browser, termasuk `Content-Type` dan `Authorization`. Header response `Location` diekspos ke frontend. Cookie cross-origin (`credentials: 'include'`) tidak didukung konfigurasi ini; `credentials` tidak diaktifkan, termasuk pada mode wildcard.
+
+Origin yang tidak ada di allowlist tidak mendapat header izin CORS; ini bukan blokir request di server. CORS hanya diterapkan browser dan bukan pengganti autentikasi/otorisasi.
+
+Restart server setelah mengubah `.env`. Untuk Docker, jalankan `docker compose up --build -d api` agar konfigurasi environment diterapkan ulang. `.env` lokal disetel `CORS_ORIGINS=*` untuk pengembangan.
+
 ## Swagger / OpenAPI
 
 Buka **http://localhost:3000/docs/api** setelah API berjalan. Swagger UI memuat seluruh endpoint health dan transaksi kas, skema request/response, parameter filter/paginasi, contoh payload, serta status error.

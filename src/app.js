@@ -1,12 +1,16 @@
 import express from 'express';
+import cors from 'cors';
+import { config } from './config.js';
+import { createCorsOptions } from './cors.js';
 import swaggerUi from 'swagger-ui-express';
 import { openapi } from './docs/openapi.js';
 import { cashTransactionRoutes } from './cash-transactions/routes.js';
 import { errorHandler } from './errors.js';
 
-export function createApp(db) {
+export function createApp(db, { corsOrigins = config.corsOrigins } = {}) {
   const app = express();
   app.disable('x-powered-by');
+  app.use(cors(createCorsOptions(corsOrigins)));
   app.use(express.json({ limit: '100kb' }));
   app.get('/docs/api/openapi.json', (req, res) => res.json(openapi));
   app.use('/docs/api', swaggerUi.serve, swaggerUi.setup(openapi, {
