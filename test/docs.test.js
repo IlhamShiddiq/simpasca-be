@@ -2,9 +2,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createApp } from '../src/app.js';
 import { openapi } from '../src/docs/openapi.js';
+import { modules } from './helpers/modules.js';
+import { authOptions } from './helpers/auth.js';
 
 test('Swagger UI, local assets and OpenAPI JSON are accessible without database queries', async (t) => {
-  const server = createApp({ query: async () => { throw new Error('Docs must not query database'); } }).listen(0, '127.0.0.1');
+  const server = createApp({ query: async () => { throw new Error('Docs must not query database'); } }, { auth: authOptions }).listen(0, '127.0.0.1');
   await new Promise((resolve) => server.once('listening', resolve));
   t.after(() => new Promise((resolve) => server.close(resolve)));
   const base = `http://127.0.0.1:${server.address().port}`;
@@ -26,7 +28,12 @@ test('Swagger UI, local assets and OpenAPI JSON are accessible without database 
 test('OpenAPI covers all API operations and resolves internal schema references', () => {
   const operations = Object.values(openapi.paths).flatMap((path) =>
     Object.keys(path).filter((key) => ['get', 'post', 'patch', 'delete'].includes(key)));
-  assert.equal(operations.length, 7);
+  assert.equal(operations.length, 10 + modules.reduce((total, resource) => total + (resource.appendOnly ? 3 : 5), 0));
+  for (const resource of modules) {
+    assert.ok(openapi.paths[`/api/${resource.path}`].post);
+    assert.ok(openapi.paths[`/api/${resource.path}/{id}`].get);
+    assert.equal(Boolean(openapi.paths[`/api/${resource.path}/{id}`].patch), !resource.appendOnly);
+  }
   const visit = (value) => {
     if (!value || typeof value !== 'object') return;
     if (value.$ref) {
@@ -37,6 +44,10 @@ test('OpenAPI covers all API operations and resolves internal schema references'
   };
   visit(openapi);
   assert.equal(openapi.servers[0].url, '/');
+  assert.deepEqual(openapi.security, [{ bearerAuth: [] }]);
+  assert.equal(openapi.components.securitySchemes.bearerAuth.scheme, 'bearer');
+  assert.deepEqual(openapi.paths['/api/auth/login'].post.security, []);
+  assert.deepEqual(openapi.paths['/health'].get.security, []);
   assert.equal(openapi.components.schemas.UpdateCashTransaction.additionalProperties, false);
   assert.equal(openapi.paths['/api/cash-transactions/{id}'].delete.responses[204].content, undefined);
 });

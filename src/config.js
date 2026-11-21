@@ -3,6 +3,12 @@ import 'dotenv/config';
 export const config = {
   port: Number(process.env.PORT || 3000),
   corsOrigins: process.env.CORS_ORIGINS ?? '',
+  auth: {
+    secret: process.env.JWT_SECRET,
+    expiresIn: Number(process.env.JWT_EXPIRES_IN_SECONDS || 3600),
+    issuer: 'simpasca-api',
+    audience: 'simpasca-client',
+  },
   database: process.env.DATABASE_URL
     ? { connectionString: process.env.DATABASE_URL }
     : {

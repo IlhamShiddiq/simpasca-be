@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { pool } from '../../src/db.js';
 import { createApp } from '../../src/app.js';
+import { authOptions, tokenFor } from '../helpers/auth.js';
 
 test('PostgreSQL: CRUD, foreign key, duplicate key, summary and soft delete', async (t) => {
   const client = await pool.connect();
@@ -18,11 +19,11 @@ test('PostgreSQL: CRUD, foreign key, duplicate key, summary and soft delete', as
     "INSERT INTO users (name, username, password_hash, role) VALUES ('Test', $1, 'test-only', 'admin') RETURNING id",
     [`test-${randomUUID()}`],
   )).rows[0];
-  server = createApp(client).listen(0, '127.0.0.1');
+  server = createApp(client, { auth: authOptions }).listen(0, '127.0.0.1');
   await new Promise((resolve) => server.once('listening', resolve));
   const base = `http://127.0.0.1:${server.address().port}/api/cash-transactions`;
   const request = (path = '', method = 'GET', body) => fetch(`${base}${path}`, {
-    method, headers: { 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined,
+    method, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${tokenFor(user.id)}` }, body: body ? JSON.stringify(body) : undefined,
   });
   const payload = { type: 'income', amount: '123.45', description: 'Test', transaction_date: '2026-11-14', request_key: randomUUID(), created_by: user.id };
   const response = await request('', 'POST', payload);

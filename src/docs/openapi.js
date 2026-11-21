@@ -1,3 +1,6 @@
+import { addResourceDocs } from './resource-openapi.js';
+import { addAuthDocs } from './auth-openapi.js';
+
 const ref = (name) => ({ $ref: `#/components/schemas/${name}` });
 const json = (schema) => ({ 'application/json': { schema } });
 const response = (description, schema) => ({ description, ...(schema ? { content: json(schema) } : {}) });
@@ -34,7 +37,7 @@ export const openapi = {
   info: {
     title: 'SIMPASCA API',
     version: '1.0.0',
-    description: 'API transaksi kas berdasarkan ERD SIMPASCA. Belum menggunakan autentikasi. created_by harus merujuk user existing (gunakan seed admin). Nominal response berupa string desimal. Transaksi terhapus tidak ditampilkan.',
+    description: 'API seluruh tabel ERD SIMPASCA dengan autentikasi JWT Bearer. Login melalui /api/auth/login lalu gunakan Authorize. Logout mencabut token yang digunakan. Semua endpoint /api selain login memerlukan token; health dan dokumentasi publik. Belum ada otorisasi berdasarkan role. Password user di-hash dan tidak ditampilkan. Riwayat stok, laporan, dan audit bersifat append-only. Mutasi stok/audit dan snapshot laporan dibuat secara eksplisit, bukan otomatis. Nilai desimal response berupa string.',
   },
   servers: [{ url: '/', description: 'Server yang sedang digunakan' }],
   tags: [{ name: 'Health', description: 'Status aplikasi dan database' }, { name: 'Cash Transactions', description: 'Pemasukan dan pengeluaran kas' }],
@@ -163,3 +166,6 @@ export const openapi = {
     },
   },
 };
+
+addResourceDocs(openapi);
+addAuthDocs(openapi);
