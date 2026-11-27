@@ -28,11 +28,12 @@ test('Swagger UI, local assets and OpenAPI JSON are accessible without database 
 test('OpenAPI covers all API operations and resolves internal schema references', () => {
   const operations = Object.values(openapi.paths).flatMap((path) =>
     Object.keys(path).filter((key) => ['get', 'post', 'patch', 'delete'].includes(key)));
-  assert.equal(operations.length, 10 + modules.reduce((total, resource) => total + (resource.appendOnly ? 3 : 5), 0));
+  const operationsOf = (resource) => (resource.readOnly ? 2 : resource.appendOnly ? 3 : 5);
+  assert.equal(operations.length, 10 + modules.reduce((total, resource) => total + operationsOf(resource), 0));
   for (const resource of modules) {
-    assert.ok(openapi.paths[`/api/${resource.path}`].post);
+    assert.equal(Boolean(openapi.paths[`/api/${resource.path}`].post), !resource.readOnly);
     assert.ok(openapi.paths[`/api/${resource.path}/{id}`].get);
-    assert.equal(Boolean(openapi.paths[`/api/${resource.path}/{id}`].patch), !resource.appendOnly);
+    assert.equal(Boolean(openapi.paths[`/api/${resource.path}/{id}`].patch), !resource.appendOnly && !resource.readOnly);
   }
   const visit = (value) => {
     if (!value || typeof value !== 'object') return;

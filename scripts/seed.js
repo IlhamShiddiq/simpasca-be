@@ -8,7 +8,7 @@ try {
   const hash = `scrypt:${salt}:${scryptSync(password, salt, 64).toString('hex')}`;
   const result = await pool.query(
     `INSERT INTO users (name, username, password_hash, role)
-     VALUES ('Administrator', 'admin', $1, 'admin')
+     VALUES ('Administrator', 'admin', $1, 'SUPERADMIN')
      ON CONFLICT (username) DO NOTHING RETURNING id, name, username, role`, [hash],
   );
   const user = result.rows[0] || (await pool.query("SELECT id, name, username, role FROM users WHERE username = 'admin'")).rows[0];

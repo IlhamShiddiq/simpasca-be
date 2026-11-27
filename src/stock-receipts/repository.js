@@ -1,3 +1,5 @@
+import { domainTools } from '../shared/domain.js';
+
 const columns = 'id, item_id, quantity::text, receipt_date::text, source_giver, item_condition, notes, request_key, created_by, created_at, updated_at, deleted_at';
 
 function filters(query) {
@@ -14,6 +16,7 @@ function filters(query) {
 
 export function createRepository(db) {
   return {
+    ...domainTools(db, createRepository),
     async list(query) {
       const { where, values } = filters(query);
       const result = await db.query(
@@ -28,7 +31,7 @@ export function createRepository(db) {
       return result.rows[0];
     },
     async find(id) {
-      const result = await db.query(`SELECT ${columns} FROM stock_receipts WHERE id = $1 AND deleted_at IS NULL`, [id]);
+      const result = await db.query(`SELECT ${columns} FROM stock_receipts WHERE id = $1 AND deleted_at IS NULL FOR UPDATE`, [id]);
       return result.rows[0];
     },
     async create(data) {

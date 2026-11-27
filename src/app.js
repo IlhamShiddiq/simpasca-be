@@ -18,7 +18,7 @@ import { auditLogRoutes } from './audit-logs/routes.js';
 import { authRoutes } from './auth/routes.js';
 import { createRepository as createAuthRepository } from './auth/repository.js';
 import { createService as createAuthService } from './auth/service.js';
-import { requireAuth } from './auth/middleware.js';
+import { authenticateApi } from './auth/middleware.js';
 
 export function createApp(db, { corsOrigins = config.corsOrigins, auth = config.auth } = {}) {
   const authService = createAuthService(createAuthRepository(db), auth);
@@ -40,7 +40,7 @@ export function createApp(db, { corsOrigins = config.corsOrigins, auth = config.
     }
   });
   app.use('/api/auth', authRoutes(authService));
-  app.use('/api', requireAuth(authService));
+  app.use('/api', authenticateApi(authService));
   app.use('/api/cash-transactions', cashTransactionRoutes(db));
   app.use('/api/users', userRoutes(db));
   app.use('/api/disasters', disasterRoutes(db));

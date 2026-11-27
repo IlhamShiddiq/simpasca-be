@@ -1,4 +1,5 @@
 import { HttpError } from '../errors.js';
+import { actorOf } from '../shared/domain.js';
 import { positiveId, validateBody, validateQuery } from './validation.js';
 import { randomBytes, scrypt as scryptCallback } from 'node:crypto';
 import { promisify } from 'node:util';
@@ -20,6 +21,7 @@ function found(row) {
   return row;
 }
 
+/** Superadmin-only writes are enforced in routes; this guards against locking yourself out. */
 export function createService(repository) {
   return {
     async list(query) {
@@ -29,7 +31,33 @@ export function createService(repository) {
     },
     async find(id) { return found(await repository.find(positiveId(id))); },
     async create(body) { return repository.create(await prepare(body)); },
-    async update(id, body) { return found(await repository.update(positiveId(id), await prepare(body, true))); },
-    async remove(id) { return found(await repository.remove(positiveId(id))); },
+    async update(id, body, actor) {
+      const userId = positiveId(id);
+      const data = await prepare(body, true);
+      const { id: actorId } = actorOf(actor);
+      if (userId === actorId && data.role !== undefined && data.role !== 'SUPERADMIN') {
+        throw new HttpError(422, 'Tidak dapat menurunkan peran akun sendiri.');
+      }
+      return repository.transaction(async (tx) => {
+        const before = found(await tx.find(userId));
+        const after = found(await tx.update(userId, data));
+        await tx.audit({
+          userId: actorId, action: 'UBAH', entityType: 'users', entityId: userId, before,
+          after: { ...after, ...(data.password_hash && { password_changed: true }) },
+        });
+        return after;
+      });
+    },
+    async remove(id, actor) {
+      const userId = positiveId(id);
+      const { id: actorId } = actorOf(actor);
+      if (userId === actorId) throw new HttpError(422, 'Tidak dapat menghapus akun sendiri.');
+      return repository.transaction(async (tx) => {
+        const before = found(await tx.find(userId));
+        found(await tx.remove(userId));
+        await tx.audit({ userId: actorId, action: 'HAPUS', entityType: 'users', entityId: userId, before });
+        return before;
+      });
+    },
   };
 }

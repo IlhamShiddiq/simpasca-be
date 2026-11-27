@@ -1,3 +1,5 @@
+import { domainTools } from '../shared/domain.js';
+
 const columns = 'id, type, amount::text, description, transaction_date::text, request_key, created_by, created_at, updated_at, deleted_at';
 
 function filters(query) {
@@ -16,6 +18,7 @@ function filters(query) {
 
 export function createRepository(db) {
   return {
+    ...domainTools(db, createRepository),
     async list(query) {
       const { where, values } = filters(query);
       // Count and rows share the same database snapshot, including an empty page.
@@ -31,7 +34,7 @@ export function createRepository(db) {
       return result.rows[0];
     },
     async find(id) {
-      const result = await db.query(`SELECT ${columns} FROM cash_transactions WHERE id = $1 AND deleted_at IS NULL`, [id]);
+      const result = await db.query(`SELECT ${columns} FROM cash_transactions WHERE id = $1 AND deleted_at IS NULL FOR UPDATE`, [id]);
       return result.rows[0];
     },
     async create(data) {

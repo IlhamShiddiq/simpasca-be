@@ -5,6 +5,7 @@ export { positiveId };
 
 const fail = (message) => { throw new HttpError(422, message); };
 const fields = ['name', 'username', 'password', 'role'];
+export const ROLES = ['PETUGAS', 'SUPERADMIN'];
 
 export function validateBody(body, partial = false) {
   if (!body || typeof body !== 'object' || Array.isArray(body)) fail('Body harus berupa object JSON.');
@@ -20,7 +21,10 @@ export function validateBody(body, partial = false) {
   if (body.name !== undefined) result.name = validateValue(body.name, { type: 'text', max: 150 }, 'name');
   if (body.username !== undefined) result.username = validateValue(body.username, { type: 'text', max: 100 }, 'username');
   if (body.password !== undefined) result.password = validateValue(body.password, { type: 'password', min: 12, max: 256 }, 'password');
-  if (body.role !== undefined) result.role = validateValue(body.role, { type: 'text', max: 50 }, 'role');
+  if (body.role !== undefined) {
+    result.role = validateValue(body.role, { type: 'text', max: 50 }, 'role');
+    if (!ROLES.includes(result.role)) fail('role harus PETUGAS atau SUPERADMIN.');
+  }
   return result;
 }
 

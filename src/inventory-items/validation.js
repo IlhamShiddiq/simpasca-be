@@ -20,7 +20,7 @@ export function validateBody(body, partial = false) {
   if (body.name !== undefined) result.name = validateValue(body.name, { type: 'text', max: 150 }, 'name');
   if (body.category !== undefined) result.category = validateValue(body.category, { type: 'text', max: 100 }, 'category');
   if (body.stock_unit !== undefined) result.stock_unit = validateValue(body.stock_unit, { type: 'text', max: 50 }, 'stock_unit');
-  if (body.initial_stock !== undefined) result.initial_stock = validateValue(body.initial_stock, { type: 'decimal', scale: 3, optional: true, min: 0 }, 'initial_stock');
+  if (body.initial_stock !== undefined) result.initial_stock = String(validateValue(body.initial_stock, { type: 'integer', min: 0 }, 'initial_stock'));
   if (body.need_ratio !== undefined) result.need_ratio = validateValue(body.need_ratio, { type: 'decimal', scale: 6, optional: true, nullable: true, positive: true }, 'need_ratio');
   if (body.need_type !== undefined) result.need_type = validateValue(body.need_type, { type: 'text', max: 50, optional: true, nullable: true }, 'need_type');
   if (body.ratio_basis !== undefined) result.ratio_basis = validateValue(body.ratio_basis, { type: 'text', max: 50, optional: true, nullable: true }, 'ratio_basis');

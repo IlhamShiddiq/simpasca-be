@@ -44,7 +44,8 @@ export const modules = [
       "shipment_id",
       "item_id"
     ],
-    "appendOnly": false
+    "appendOnly": false,
+    "readOnly": true
   },
   {
     "path": "stock-receipts",
@@ -65,7 +66,8 @@ export const modules = [
       "movement_type",
       "created_by"
     ],
-    "appendOnly": true
+    "appendOnly": true,
+    "readOnly": true
   },
   {
     "path": "generated-reports",
@@ -83,6 +85,7 @@ export const modules = [
       "entity_type",
       "entity_id"
     ],
-    "appendOnly": true
+    "appendOnly": true,
+    "readOnly": true
   }
 ];

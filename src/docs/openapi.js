@@ -37,7 +37,7 @@ export const openapi = {
   info: {
     title: 'SIMPASCA API',
     version: '1.0.0',
-    description: 'API seluruh tabel ERD SIMPASCA dengan autentikasi JWT Bearer. Login melalui /api/auth/login lalu gunakan Authorize. Logout mencabut token yang digunakan. Semua endpoint /api selain login memerlukan token; health dan dokumentasi publik. Belum ada otorisasi berdasarkan role. Password user di-hash dan tidak ditampilkan. Riwayat stok, laporan, dan audit bersifat append-only. Mutasi stok/audit dan snapshot laporan dibuat secara eksplisit, bukan otomatis. Nilai desimal response berupa string.',
+    description: 'API seluruh tabel ERD SIMPASCA dengan autentikasi JWT Bearer. Login melalui /api/auth/login lalu gunakan Authorize. Logout mencabut token yang digunakan. Baca (GET) terbuka tanpa token untuk transparansi bantuan, kecuali data akun (/api/users); setiap perubahan memerlukan token. Pengelolaan akun hanya untuk role SUPERADMIN (role: PETUGAS atau SUPERADMIN). created_by/generated_by diambil dari token. Stok dihitung dari stock_movements dan ditulis otomatis oleh barang, penerimaan, dan pengiriman dalam satu transaksi; stok tidak boleh negatif. Audit log (UBAH, HAPUS, GENERATE_LAPORAN) ditulis otomatis. Password user di-hash dan tidak ditampilkan. Nilai desimal response berupa string.',
   },
   servers: [{ url: '/', description: 'Server yang sedang digunakan' }],
   tags: [{ name: 'Health', description: 'Status aplikasi dan database' }, { name: 'Cash Transactions', description: 'Pemasukan dan pengeluaran kas' }],
@@ -122,11 +122,10 @@ export const openapi = {
       },
       CreateCashTransaction: {
         type: 'object', additionalProperties: false,
-        required: ['type', 'amount', 'transaction_date', 'request_key', 'created_by'],
+        required: ['type', 'amount', 'transaction_date', 'request_key'],
         properties: {
           ...editable,
           request_key: { type: 'string', minLength: 1, maxLength: 100, pattern: '\\S', description: 'Key unik; spasi di awal/akhir dihapus.', example: 'donasi-20261114-001' },
-          created_by: { ...id, description: 'ID user existing dari hasil seed admin.' },
         },
       },
       UpdateCashTransaction: {
