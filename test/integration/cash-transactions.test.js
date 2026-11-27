@@ -46,6 +46,18 @@ test('PostgreSQL: CRUD, foreign key, duplicate key, summary and soft delete', as
   const spoofed = await request('', 'POST', { ...payload, request_key: randomUUID(), created_by: 2147483647 });
   assert.equal(spoofed.status, 201);
   assert.equal((await spoofed.json()).data.created_by, user.id);
+  // Optional links: an expense for a disaster and the stock receipt it paid for.
+  const disaster = (await client.query(
+    "INSERT INTO disasters (disaster_type, province, regency_city, status, handling_scale, occurred_at, created_by) VALUES ('Banjir', 'Jawa Barat', 'Kab. Bandung', 'AKTIF', 'PROVINSI', NOW(), $1) RETURNING id",
+    [user.id],
+  )).rows[0];
+  const linked = await request('', 'POST', { ...payload, type: 'expense', request_key: randomUUID(), disaster_id: disaster.id });
+  assert.equal(linked.status, 201);
+  assert.equal((await linked.json()).data.disaster_id, disaster.id);
+  const forDisaster = (await (await request(`/summary?disaster_id=${disaster.id}`)).json()).data;
+  assert.equal(forDisaster.total_expense, '123.45');
+  assert.equal((await request('', 'POST', { ...payload, request_key: randomUUID(), disaster_id: 2147483647 })).status, 422);
+  assert.equal((await request(`/${data.id}`, 'PATCH', { receipt_id: 2147483647 })).status, 422);
   assert.equal((await request(`/${data.id}`, 'DELETE')).status, 204);
   assert.equal((await request(`/${data.id}`)).status, 404);
   assert.equal((await request(`/${data.id}`, 'PATCH', { amount: '1' })).status, 404);

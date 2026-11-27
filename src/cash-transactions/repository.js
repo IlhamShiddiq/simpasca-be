@@ -1,12 +1,13 @@
 import { domainTools } from '../shared/domain.js';
 
-const columns = 'id, type, amount::text, description, transaction_date::text, request_key, created_by, created_at, updated_at, deleted_at';
+const columns = 'id, type, amount::text, description, transaction_date::text, request_key, created_by, disaster_id, receipt_id, created_at, updated_at, deleted_at';
 
 function filters(query) {
   const conditions = ['deleted_at IS NULL'];
   const values = [];
   for (const [key, column, operator] of [
     ['type', 'type', '='], ['date_from', 'transaction_date', '>='], ['date_to', 'transaction_date', '<='],
+    ['disaster_id', 'disaster_id', '='], ['receipt_id', 'receipt_id', '='],
   ]) {
     if (query[key]) {
       values.push(query[key]);
@@ -39,9 +40,10 @@ export function createRepository(db) {
     },
     async create(data) {
       const result = await db.query(
-        `INSERT INTO cash_transactions (type, amount, description, transaction_date, request_key, created_by)
-         VALUES ($1, $2, $3, $4, $5, $6) RETURNING ${columns}`,
-        [data.type, data.amount, data.description ?? null, data.transaction_date, data.request_key, data.created_by],
+        `INSERT INTO cash_transactions (type, amount, description, transaction_date, request_key, created_by, disaster_id, receipt_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING ${columns}`,
+        [data.type, data.amount, data.description ?? null, data.transaction_date, data.request_key, data.created_by,
+          data.disaster_id ?? null, data.receipt_id ?? null],
       );
       return result.rows[0];
     },
@@ -54,6 +56,12 @@ export function createRepository(db) {
         [...keys.map((key) => data[key]), id],
       );
       return result.rows[0];
+    },
+    async liveDisaster(id) {
+      return (await db.query('SELECT id FROM disasters WHERE id = $1 AND deleted_at IS NULL', [id])).rows[0];
+    },
+    async liveReceipt(id) {
+      return (await db.query('SELECT id FROM stock_receipts WHERE id = $1 AND deleted_at IS NULL', [id])).rows[0];
     },
     async remove(id) {
       const result = await db.query(

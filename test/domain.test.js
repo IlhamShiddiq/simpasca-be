@@ -6,6 +6,7 @@ import { createService as createReceipts } from '../src/stock-receipts/service.j
 import { createService as createItems } from '../src/inventory-items/service.js';
 import { createService as createUsers } from '../src/users/service.js';
 import { createService as createAudit } from '../src/audit-logs/service.js';
+import { createService as createCash } from '../src/cash-transactions/service.js';
 import { authOptions, tokenFor } from './helpers/auth.js';
 
 const petugas = { id: 3, name: 'Rina', username: 'rina', role: 'PETUGAS' };
@@ -127,4 +128,20 @@ test('visitors read the audit trail without entries about accounts', async () =>
   assert.equal(filters.hideUsers, false);
   await assert.rejects(service.find('5', null), { status: 404 });
   assert.equal((await service.find('5', petugas)).id, 5);
+});
+
+test('cash links must be live and a receipt link needs an expense', async () => {
+  const created = [];
+  const service = createCash({
+    liveDisaster: async (id) => (id === 1 ? { id } : undefined),
+    liveReceipt: async (id) => (id === 2 ? { id } : undefined),
+    create: async (data) => { created.push(data); return data; },
+  });
+  const actor = { id: 9, role: 'PETUGAS' };
+  const base = { type: 'expense', amount: '10', transaction_date: '2026-11-14', request_key: 'k' };
+  assert.equal((await service.create({ ...base, disaster_id: 1, receipt_id: 2 }, actor)).disaster_id, 1);
+  await assert.rejects(service.create({ ...base, type: 'income', receipt_id: 2 }, actor), { status: 422 });
+  await assert.rejects(service.create({ ...base, disaster_id: 5 }, actor), { status: 422 });
+  await assert.rejects(service.create({ ...base, receipt_id: 5 }, actor), { status: 422 });
+  assert.equal(created.length, 1);
 });
