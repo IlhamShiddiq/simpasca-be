@@ -16,7 +16,7 @@ test('PostgreSQL: CRUD, foreign key, duplicate key, summary and soft delete', as
   });
   await client.query('BEGIN');
   const user = (await client.query(
-    "INSERT INTO users (name, username, password_hash, role) VALUES ('Test', $1, 'test-only', 'admin') RETURNING id",
+    "INSERT INTO users (name, username, password_hash, role) VALUES ('Test', $1, 'test-only', 'SUPERADMIN') RETURNING id",
     [`test-${randomUUID()}`],
   )).rows[0];
   server = createApp(client, { auth: authOptions }).listen(0, '127.0.0.1');
@@ -30,6 +30,7 @@ test('PostgreSQL: CRUD, foreign key, duplicate key, summary and soft delete', as
   assert.equal(response.status, 201);
   const { data } = await response.json();
   assert.equal(data.amount, '123.45');
+  assert.equal(data.created_by, user.id);
   assert.equal((await (await request(`/${data.id}`)).json()).data.transaction_date, payload.transaction_date);
   const list = await (await request('?limit=100')).json();
   assert.equal(list.data.find((row) => row.id === data.id).amount, '123.45');
@@ -41,9 +42,10 @@ test('PostgreSQL: CRUD, foreign key, duplicate key, summary and soft delete', as
   await client.query('SAVEPOINT duplicate');
   assert.equal((await request('', 'POST', payload)).status, 409);
   await client.query('ROLLBACK TO SAVEPOINT duplicate');
-  await client.query('SAVEPOINT foreign_key');
-  assert.equal((await request('', 'POST', { ...payload, request_key: randomUUID(), created_by: 2147483647 })).status, 422);
-  await client.query('ROLLBACK TO SAVEPOINT foreign_key');
+  // created_by comes from the token; a client-sent value is ignored.
+  const spoofed = await request('', 'POST', { ...payload, request_key: randomUUID(), created_by: 2147483647 });
+  assert.equal(spoofed.status, 201);
+  assert.equal((await spoofed.json()).data.created_by, user.id);
   assert.equal((await request(`/${data.id}`, 'DELETE')).status, 204);
   assert.equal((await request(`/${data.id}`)).status, 404);
   assert.equal((await request(`/${data.id}`, 'PATCH', { amount: '1' })).status, 404);

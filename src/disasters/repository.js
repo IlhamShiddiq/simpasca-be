@@ -1,7 +1,9 @@
-const columns = 'id, disaster_type, province, regency_city, latitude::text, longitude::text, location_details, status, handling_scale, occurred_at, affected_people, affected_households, impact_notes, created_by';
+import { domainTools } from '../shared/domain.js';
+
+const columns = 'id, disaster_type, province, regency_city, latitude::text, longitude::text, location_details, status, handling_scale, occurred_at, affected_people, affected_households, impact_notes, created_by, deleted_at';
 
 function filters(query) {
-  const conditions = ['TRUE'];
+  const conditions = ['deleted_at IS NULL'];
   const values = [];
   for (const key of ['status', 'disaster_type', 'province', 'regency_city', 'created_by']) {
     if (query[key] !== undefined) {
@@ -14,6 +16,7 @@ function filters(query) {
 
 export function createRepository(db) {
   return {
+    ...domainTools(db, createRepository),
     async list(query) {
       const { where, values } = filters(query);
       const result = await db.query(
@@ -28,7 +31,7 @@ export function createRepository(db) {
       return result.rows[0];
     },
     async find(id) {
-      const result = await db.query(`SELECT ${columns} FROM disasters WHERE id = $1`, [id]);
+      const result = await db.query(`SELECT ${columns} FROM disasters WHERE id = $1 AND deleted_at IS NULL FOR UPDATE`, [id]);
       return result.rows[0];
     },
     async create(data) {
@@ -44,14 +47,14 @@ export function createRepository(db) {
       const assignments = keys.map((key, index) => `${key} = $${index + 1}`);
       const result = await db.query(
         `UPDATE disasters SET ${assignments.join(', ')}
-         WHERE id = $${keys.length + 1} RETURNING ${columns}`,
+         WHERE id = $${keys.length + 1} AND deleted_at IS NULL RETURNING ${columns}`,
         [...keys.map((key) => data[key]), id],
       );
       return result.rows[0];
     },
     async remove(id) {
       const result = await db.query(
-        'DELETE FROM disasters WHERE id = $1 RETURNING id', [id],
+        'UPDATE disasters SET deleted_at = NOW() WHERE id = $1 AND deleted_at IS NULL RETURNING id', [id],
       );
       return result.rows[0];
     },

@@ -30,7 +30,7 @@ test('PostgreSQL: complete ERD migrations, relations and constraints', async (t)
   ]);
 
   const insert = async (sql, values = []) => (await client.query(`${sql} RETURNING *`, values)).rows[0];
-  const user = await insert("INSERT INTO users (name, username, password_hash, role) VALUES ('Test', 'test', 'test-only', 'admin')");
+  const user = await insert("INSERT INTO users (name, username, password_hash, role) VALUES ('Test', 'test', 'test-only', 'SUPERADMIN')");
   const disaster = await insert(`INSERT INTO disasters
     (disaster_type, province, regency_city, status, handling_scale, occurred_at, created_by)
     VALUES ('flood', 'Jawa Barat', 'Bandung', 'active', 'city', NOW(), $1)`, [user.id]);
@@ -69,6 +69,7 @@ test('PostgreSQL: complete ERD migrations, relations and constraints', async (t)
     await assert.rejects(client.query(sql, values), (error) => error.code === code);
     await client.query('ROLLBACK TO SAVEPOINT constraint_check');
   };
+  await rejects("UPDATE users SET role = 'operator' WHERE id = $1", [user.id], '23514');
   await rejects('UPDATE shipments SET disaster_id = -1 WHERE id = $1', [shipment.id], '23503');
   await rejects('DELETE FROM users WHERE id = $1', [user.id], '23503');
   await rejects('DELETE FROM inventory_items WHERE id = $1', [item.id], '23503');

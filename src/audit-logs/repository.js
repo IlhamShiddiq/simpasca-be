@@ -9,6 +9,7 @@ function filters(query) {
       conditions.push(`${key} = $${values.length}`);
     }
   }
+  if (query.hideUsers) conditions.push("entity_type <> 'users'");
   return { where: conditions.join(' AND '), values };
 }
 

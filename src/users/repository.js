@@ -1,3 +1,5 @@
+import { domainTools } from '../shared/domain.js';
+
 const columns = 'id, name, username, role, created_at, updated_at';
 
 function filters(query) {
@@ -14,6 +16,7 @@ function filters(query) {
 
 export function createRepository(db) {
   return {
+    ...domainTools(db, createRepository),
     async list(query) {
       const { where, values } = filters(query);
       const result = await db.query(
@@ -28,7 +31,7 @@ export function createRepository(db) {
       return result.rows[0];
     },
     async find(id) {
-      const result = await db.query(`SELECT ${columns} FROM users WHERE id = $1`, [id]);
+      const result = await db.query(`SELECT ${columns} FROM users WHERE id = $1 FOR UPDATE`, [id]);
       return result.rows[0];
     },
     async create(data) {

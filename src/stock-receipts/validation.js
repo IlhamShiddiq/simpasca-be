@@ -18,7 +18,7 @@ export function validateBody(body, partial = false) {
   }
   const result = {};
   if (body.item_id !== undefined) result.item_id = validateValue(body.item_id, { type: 'id', immutable: true }, 'item_id');
-  if (body.quantity !== undefined) result.quantity = validateValue(body.quantity, { type: 'decimal', scale: 3, positive: true }, 'quantity');
+  if (body.quantity !== undefined) result.quantity = String(validateValue(body.quantity, { type: 'integer', min: 1 }, 'quantity'));
   if (body.receipt_date !== undefined) result.receipt_date = validateValue(body.receipt_date, { type: 'date' }, 'receipt_date');
   if (body.source_giver !== undefined) result.source_giver = validateValue(body.source_giver, { type: 'text', max: 150 }, 'source_giver');
   if (body.item_condition !== undefined) result.item_condition = validateValue(body.item_condition, { type: 'text', max: 100 }, 'item_condition');

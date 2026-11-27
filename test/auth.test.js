@@ -35,18 +35,24 @@ test('auth validates config, credentials, JWT signature, expiry, issuer and revo
   await assert.rejects(service.authenticate(`Bearer ${login.access_token}`), { status: 401 });
 });
 
-test('all API modules and auth/me/logout require bearer token before database access', async (t) => {
-  const server = createApp({ query: async () => { throw new Error('Unauthenticated request must not query DB'); } }, { auth: authOptions }).listen(0, '127.0.0.1');
+test('writes, account reads and auth/me/logout require a bearer token before database access; other reads are public', async (t) => {
+  const server = createApp({ query: async () => { throw new Error('test double: database offline'); } }, { auth: authOptions }).listen(0, '127.0.0.1');
   await new Promise((resolve) => server.once('listening', resolve));
   t.after(() => new Promise((resolve) => server.close(resolve)));
   const base = `http://127.0.0.1:${server.address().port}/api`;
   for (const path of ['cash-transactions', ...modules.map((entry) => entry.path)]) {
-    for (const [suffix, method] of [['', 'GET'], ['', 'POST'], ['/1', 'GET'], ['/1', 'PATCH'], ['/1', 'DELETE']]) {
+    for (const [suffix, method] of [['', 'POST'], ['/1', 'PATCH'], ['/1', 'DELETE'], ...(path === 'users' ? [['', 'GET'], ['/1', 'GET']] : [])]) {
       const response = await fetch(`${base}/${path}${suffix}`, { method });
       assert.equal(response.status, 401, `${method} ${path}${suffix}`);
       assert.equal(response.headers.get('www-authenticate'), 'Bearer');
     }
+    if (path !== 'users') {
+      // Public read: it reaches the database (which this double refuses) instead of stopping at auth.
+      assert.notEqual((await fetch(`${base}/${path}`)).status, 401, `GET ${path}`);
+    }
   }
+  // A token that is sent must be valid, even on reads.
+  assert.equal((await fetch(`${base}/disasters`, { headers: { Authorization: 'Bearer invalid' } })).status, 401);
   assert.equal((await fetch(`${base}/auth/me`)).status, 401);
   assert.equal((await fetch(`${base}/auth/logout`, { method: 'POST' })).status, 401);
 });

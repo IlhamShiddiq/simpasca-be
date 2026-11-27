@@ -15,7 +15,7 @@ test('PostgreSQL HTTP: login, me, protected API and persistent logout', async (t
   await client.query('BEGIN');
   const username = `auth-${randomUUID()}`;
   const password = 'test-password-123';
-  const user = (await client.query("INSERT INTO users (name, username, password_hash, role) VALUES ('Auth test', $1, $2, 'admin') RETURNING id", [username, passwordHash(password)])).rows[0];
+  const user = (await client.query("INSERT INTO users (name, username, password_hash, role) VALUES ('Auth test', $1, $2, 'SUPERADMIN') RETURNING id", [username, passwordHash(password)])).rows[0];
   server = createApp(client, { auth: authOptions }).listen(0, '127.0.0.1');
   await new Promise((resolve) => server.once('listening', resolve));
   const base = `http://127.0.0.1:${server.address().port}/api`;

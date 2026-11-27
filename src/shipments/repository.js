@@ -1,4 +1,7 @@
+import { domainTools } from '../shared/domain.js';
+
 const columns = 'id, disaster_id, status, shipped_at, received_at, destination, person_in_charge, request_key, created_by, created_at, updated_at, deleted_at';
+const itemColumns = 'id, item_id, quantity::text';
 
 function filters(query) {
   const conditions = ['deleted_at IS NULL'];
@@ -14,6 +17,7 @@ function filters(query) {
 
 export function createRepository(db) {
   return {
+    ...domainTools(db, createRepository),
     async list(query) {
       const { where, values } = filters(query);
       const result = await db.query(
@@ -28,7 +32,7 @@ export function createRepository(db) {
       return result.rows[0];
     },
     async find(id) {
-      const result = await db.query(`SELECT ${columns} FROM shipments WHERE id = $1 AND deleted_at IS NULL`, [id]);
+      const result = await db.query(`SELECT ${columns} FROM shipments WHERE id = $1 AND deleted_at IS NULL FOR UPDATE`, [id]);
       return result.rows[0];
     },
     async create(data) {
@@ -54,6 +58,28 @@ export function createRepository(db) {
         'UPDATE shipments SET deleted_at = NOW(), updated_at = NOW() WHERE id = $1 AND deleted_at IS NULL RETURNING id', [id],
       );
       return result.rows[0];
+    },
+    async liveDisaster(id) {
+      return (await db.query('SELECT id FROM disasters WHERE id = $1 AND deleted_at IS NULL', [id])).rows[0];
+    },
+    async liveItems(shipmentId) {
+      const result = await db.query(
+        `SELECT ${itemColumns} FROM shipment_items WHERE shipment_id = $1 AND deleted_at IS NULL ORDER BY id`, [shipmentId],
+      );
+      return result.rows;
+    },
+    /** One row per (shipment, item) exists for life (UNIQUE), so a line removed earlier is revived. */
+    async upsertItem(shipmentId, itemId, quantity) {
+      const result = await db.query(
+        `INSERT INTO shipment_items (shipment_id, item_id, quantity) VALUES ($1, $2, $3)
+         ON CONFLICT (shipment_id, item_id) DO UPDATE SET quantity = EXCLUDED.quantity, deleted_at = NULL
+         RETURNING ${itemColumns}`,
+        [shipmentId, itemId, String(quantity)],
+      );
+      return result.rows[0];
+    },
+    async removeItem(id) {
+      await db.query('UPDATE shipment_items SET deleted_at = NOW() WHERE id = $1 AND deleted_at IS NULL', [id]);
     },
   };
 }

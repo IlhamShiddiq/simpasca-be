@@ -42,13 +42,15 @@ test('each API module owns routes, controller, service, repository and validatio
     assert.match(repository, new RegExp(`INSERT INTO ${module.path.replaceAll('-', '_')} \\(`));
     assert.match(validation, /export function validateBody\(body, partial = false\)/);
     assert.match(validation, /export function validateQuery\(query\)/);
-    assert.equal(routes.includes('controller.update'), !module.appendOnly);
+    assert.equal(routes.includes('controller.update'), !module.appendOnly && !module.readOnly);
+    assert.equal(routes.includes('router.post'), !module.readOnly);
   }
 });
 
 test('resource validation preserves decimals and validates dates, coordinates and JSON', () => {
-  assert.deepEqual(inventory.validateBody({ initial_stock: '10.125', need_ratio: null }, true), { initial_stock: '10.125', need_ratio: null });
-  for (const body of [{ initial_stock: '1.0001' }, { initial_stock: '-1' }, { need_ratio: '0' },
+  // Stock is counted in whole units (AB-02.2, AC-13).
+  assert.deepEqual(inventory.validateBody({ initial_stock: '10', need_ratio: null }, true), { initial_stock: '10', need_ratio: null });
+  for (const body of [{ initial_stock: '1.0001' }, { initial_stock: '10.5' }, { initial_stock: '-1' }, { need_ratio: '0' },
     { expiration_date: '2026-02-30' }, { expiration_date: '0000-01-01' }]) {
     assert.throws(() => inventory.validateBody(body, true), { status: 422 });
   }
@@ -71,7 +73,7 @@ test('stock movement validation requires exactly one positive direction and at m
 test('user service hashes passwords and never passes plaintext to repository', async () => {
   let captured;
   const service = createService({ create: async (data) => { captured = data; return { id: 1, username: data.username }; } });
-  await service.create({ name: 'Test', username: 'test', password: 'a-secure-password', role: 'admin' });
+  await service.create({ name: 'Test', username: 'test', password: 'a-secure-password', role: 'PETUGAS' });
   assert.equal(captured.password, undefined);
   assert.match(captured.password_hash, /^scrypt:[a-f0-9]{32}:[a-f0-9]{128}$/);
 });

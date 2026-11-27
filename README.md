@@ -10,8 +10,9 @@ API Express.js 5 + PostgreSQL dengan skema database dan endpoint untuk seluruh t
 - `amount`: positif, PostgreSQL `NUMERIC(15,2)`. Kirim sebagai **string desimal** untuk menjaga presisi. API mengembalikan nominal sebagai string, termasuk pada daftar dan ringkasan.
 - `transaction_date`: tanggal valid `YYYY-MM-DD`. Timestamp audit disimpan sebagai `TIMESTAMPTZ`.
 - `request_key` unik secara global, termasuk transaksi yang sudah dihapus. Pengiriman ulang key menghasilkan **409**, bukan membuat transaksi baru. Key tidak dapat diubah.
-- `created_by` wajib merujuk user yang ada dan tidak dapat diubah. API user dan seed admin tersedia; password di-hash dengan scrypt dan hash tidak pernah ditampilkan oleh API user.
-- Semua endpoint `/api` selain login memerlukan **JWT Bearer token**. **Belum ada otorisasi berdasarkan role**: setiap user yang login dapat mengakses seluruh modul, termasuk mengubah user/role dan mengirim ID petugas yang valid. Batasi ke lingkungan tepercaya sampai kontrol akses dan audit server-side ditambahkan. Gunakan HTTPS untuk deployment.
+- `created_by` (dan `generated_by`/`generated_by_name` laporan) **diambil dari token**; nilai yang dikirim client diabaikan. Password di-hash dengan scrypt dan hash tidak pernah ditampilkan.
+- **Baca terbuka untuk publik** (transparansi bantuan bencana): `GET` tanpa token diizinkan untuk semua modul kecuali `/api/users`, dan audit log tentang akun disembunyikan dari pengunjung. **Setiap perubahan memerlukan JWT Bearer token.** Token yang dikirim tetap harus valid, juga pada GET.
+- **Role** hanya `PETUGAS` atau `SUPERADMIN` (SKPL KF-01). Membuat/mengubah/menghapus akun hanya untuk `SUPERADMIN` (**403** untuk lainnya); akun tidak dapat menghapus atau menurunkan peran dirinya sendiri. Gunakan HTTPS untuk deployment.
 - Saldo negatif diperbolehkan; ERD tidak menetapkan larangan pengeluaran melebihi pemasukan. Ringkasan menghitung transaksi aktif, bukan saldo rekening bank.
 
 ## Skema database sesuai ERD
@@ -81,7 +82,7 @@ Database memakai healthcheck; API menjalankan migrasi otomatis sebelum server di
 docker compose run --rm api npm run db:seed
 ```
 
-Seed menampilkan ID admin yang digunakan sebagai `created_by`. Jika admin sudah ada, password existing **tidak** diubah. Seed tidak dijalankan otomatis saat startup.
+Seed membuat akun `admin` dengan role `SUPERADMIN`. Jika admin sudah ada, password existing **tidak** diubah. Migration `004` mengubah role lama `admin` menjadi `SUPERADMIN` dan role lain menjadi `PETUGAS`. Seed tidak dijalankan otomatis saat startup.
 
 ```sh
 curl http://localhost:3000/health
@@ -171,7 +172,7 @@ curl -X POST http://localhost:3000/api/auth/login \
   -d '{"username":"admin","password":"password-admin-anda"}'
 ```
 
-Response berbentuk `{ "data": { "access_token": "...", "token_type": "Bearer", "expires_in": 3600, "user": { "id": 1, "name": "Administrator", "username": "admin", "role": "admin" } } }`.
+Response berbentuk `{ "data": { "access_token": "...", "token_type": "Bearer", "expires_in": 3600, "user": { "id": 1, "name": "Administrator", "username": "admin", "role": "SUPERADMIN" } } }`.
 
 Kredensial salah menghasilkan 401 dengan pesan yang sama untuk username tidak ditemukan maupun password salah. Input tidak valid menghasilkan 422. Token memiliki `sub`, `jti`, `iat`, `exp`, issuer dan audience; hanya algoritma HS256 yang diterima.
 
@@ -186,11 +187,11 @@ curl http://localhost:3000/api/cash-transactions -H "Authorization: Bearer $TOKE
 curl -X POST http://localhost:3000/api/auth/logout -H "Authorization: Bearer $TOKEN"
 ```
 
-Contoh curl modul lain di README juga memerlukan `-H "Authorization: Bearer $TOKEN"`. Token tidak diterima lewat query string/cookie. Tanpa token, token tidak valid/kedaluwarsa/dicabut, atau user telah dihapus menghasilkan **401** dan header `WWW-Authenticate: Bearer`. `/health`, `/docs/api`, dan spesifikasi OpenAPI tetap publik; preflight CORS tidak memerlukan token.
+Contoh POST/PATCH/DELETE di README memerlukan `-H "Authorization: Bearer $TOKEN"`; GET publik kecuali `/api/users`. Token tidak diterima lewat query string/cookie. Perubahan tanpa token, token tidak valid/kedaluwarsa/dicabut, atau user telah dihapus menghasilkan **401** dan header `WWW-Authenticate: Bearer`. `/health`, `/docs/api`, dan spesifikasi OpenAPI tetap publik; preflight CORS tidak memerlukan token.
 
 Logout mencabut **token yang sedang digunakan**, bukan seluruh sesi user. Pencabutan tersimpan di PostgreSQL sehingga tetap berlaku setelah restart API. Token dari login lain tetap berlaku. Client harus menghapus token lokal setelah logout. Tidak ada refresh token; login ulang setelah kedaluwarsa. Perubahan password belum membatalkan token lain otomatis. Baris pencabutan kedaluwarsa dapat dibersihkan berkala melalui `DELETE FROM auth_revoked_tokens WHERE expires_at <= NOW()`.
 
-Belum tersedia rate limiting/lockout login maupun pembatasan berdasarkan role; gunakan pembatasan request di reverse proxy dan kontrol akses sebelum deployment publik. Field `created_by` dan nama snapshot masih input caller, bukan otomatis dari token.
+Belum tersedia rate limiting/lockout login; gunakan pembatasan request di reverse proxy sebelum deployment publik.
 
 ## Endpoint
 
@@ -213,17 +214,17 @@ Ganti `created_by` dengan ID yang ditampilkan seed. Gunakan key baru untuk trans
 ```sh
 curl -X POST http://localhost:3000/api/cash-transactions \
   -H 'Content-Type: application/json' \
+  -H "Authorization: Bearer $TOKEN" \
   -d '{
     "type": "income",
     "amount": "1500000.00",
     "description": "Donasi bantuan bencana",
     "transaction_date": "2026-11-14",
-    "request_key": "donasi-20261114-001",
-    "created_by": 1
+    "request_key": "donasi-20261114-001"
   }'
 ```
 
-Semua field wajib kecuali `description` (string maksimal 5000 karakter atau null). `request_key` maksimal 100 karakter. Response detail/create/update berbentuk `{ "data": { ... } }`.
+Semua field wajib kecuali `description` (`created_by` diambil dari token) (string maksimal 5000 karakter atau null). `request_key` maksimal 100 karakter. Response detail/create/update berbentuk `{ "data": { ... } }`.
 
 ### Filter dan paginasi
 
@@ -278,103 +279,81 @@ Seluruh path berikut diawali `/api`. Semua modul mendukung:
 - `GET /<modul>/:id`: detail dengan `{ data: {...} }`.
 - `POST /<modul>`: buat data, response **201** dan header `Location`.
 - Modul CRUD juga mendukung `PATCH /<modul>/:id` untuk pembaruan parsial dan `DELETE /<modul>/:id` dengan response **204** tanpa body.
-- Modul append-only **tidak menyediakan PATCH/DELETE** (404).
+- Modul hanya-baca tidak menyediakan POST/PATCH/DELETE (404): isinya ditulis API sendiri.
 
 | Modul | Operasi | Filter daftar selain `page`, `limit` |
 | --- | --- | --- |
-| `users` | CRUD; hard delete | `username`, `role` |
-| `disasters` | CRUD; hard delete | `status`, `disaster_type`, `province`, `regency_city`, `created_by` |
-| `inventory-items` | CRUD; hard delete | `category`, `stock_unit`, `need_type`, `created_by` |
-| `shipments` | CRUD; soft delete | `disaster_id`, `status`, `created_by` |
-| `shipment-items` | CRUD; soft delete | `shipment_id`, `item_id` |
-| `stock-receipts` | CRUD; soft delete | `item_id`, `item_condition`, `created_by` |
-| `stock-movements` | Daftar, detail, buat (append-only) | `item_id`, `disaster_id`, `receipt_id`, `shipment_item_id`, `movement_type`, `created_by` |
-| `generated-reports` | Daftar, detail, buat (append-only) | `disaster_id`, `generated_by` |
-| `audit-logs` | Daftar, detail, buat (append-only) | `user_id`, `action`, `entity_type`, `entity_id` |
+| `users` | CRUD (tulis hanya SUPERADMIN); hard delete; tidak publik | `username`, `role` |
+| `disasters` | CRUD; soft delete | `status`, `disaster_type`, `province`, `regency_city`, `created_by` |
+| `inventory-items` | CRUD; soft delete; menulis STOK_AWAL/KOREKSI | `category`, `stock_unit`, `need_type`, `created_by` |
+| `shipments` | CRUD beserta `items`; soft delete; menulis PENGIRIMAN/KOREKSI | `disaster_id`, `status`, `created_by` |
+| `shipment-items` | Hanya baca (diubah melalui `shipments`) | `shipment_id`, `item_id` |
+| `stock-receipts` | CRUD; soft delete; menulis PENERIMAAN/KOREKSI | `item_id`, `item_condition`, `created_by` |
+| `stock-movements` | Hanya baca (buku besar stok) | `item_id`, `disaster_id`, `receipt_id`, `shipment_item_id`, `movement_type`, `created_by` |
+| `generated-reports` | Daftar, detail, buat (append-only); menulis audit GENERATE_LAPORAN | `disaster_id`, `generated_by` |
+| `audit-logs` | Hanya baca (ditulis otomatis) | `user_id`, `action`, `entity_type`, `entity_id` |
 
-Filter menggunakan exact-match dan dapat digabungkan. Daftar modul baru diurutkan `id DESC`; default `page=1`, `limit=20`, maksimal 100. ID wajib integer positif maksimal 2147483647. Parameter berulang, parameter tidak dikenal, field tidak dikenal, dan PATCH kosong menghasilkan **422**. Data soft-deleted tidak muncul dalam daftar/detail dan tidak dapat diubah lagi. Hard delete data yang masih direferensikan menghasilkan **409**.
+Filter menggunakan exact-match dan dapat digabungkan. Daftar modul baru diurutkan `id DESC`; default `page=1`, `limit=20`, maksimal 100. ID wajib integer positif maksimal 2147483647. Parameter berulang, parameter tidak dikenal, field tidak dikenal, dan PATCH kosong menghasilkan **422**. Data soft-deleted tidak muncul dalam daftar/detail dan tidak dapat diubah lagi. Hard delete akun yang masih direferensikan menghasilkan **409**.
 
 ### Contoh payload POST
 
-Sesuaikan ID dengan response data yang dibuat sebelumnya. Nilai enum seperti `active`, `draft`, dan `receipt` di bawah hanya contoh, bukan daftar enum yang dibatasi server.
+Sesuaikan ID dengan response data yang dibuat sebelumnya. Jangan kirim `created_by`: nilainya diambil dari token.
 
-**`/api/users`** — password wajib 12–256 karakter; hanya field `password` yang diterima, bukan `password_hash`. PATCH password akan membuat hash baru.
+**`/api/users`** (SUPERADMIN) — password wajib 12–256 karakter; hanya field `password` yang diterima. PATCH password membuat hash baru.
 
 ```json
-{"name":"Petugas","username":"petugas1","password":"Ganti-password-aman-123","role":"operator"}
+{"name":"Petugas","username":"petugas1","password":"Ganti-password-aman-123","role":"PETUGAS"}
 ```
 
 **`/api/disasters`**
 
 ```json
-{"disaster_type":"banjir","province":"Jawa Barat","regency_city":"Bandung","latitude":"-6.9175000","longitude":"107.6191000","status":"active","handling_scale":"city","occurred_at":"2026-11-21T08:00:00+07:00","affected_people":100,"affected_households":25,"created_by":1}
+{"disaster_type":"Banjir","province":"Jawa Barat","regency_city":"Kab. Bandung","latitude":"-6.9175000","longitude":"107.6191000","status":"AKTIF","handling_scale":"PROVINSI","occurred_at":"2026-11-21T08:00:00+07:00","affected_people":100,"affected_households":25}
 ```
 
-Opsional: `latitude`, `longitude`, `location_details`, `impact_notes` (boleh null). `affected_people` dan `affected_households` default 0.
+Opsional: `latitude`, `longitude`, `location_details`, `impact_notes` (boleh null). `affected_people` dan `affected_households` default 0. DELETE adalah soft delete; pengiriman dan laporan tetap merujuknya.
 
 **`/api/inventory-items`**
 
 ```json
-{"name":"Beras","category":"pangan","stock_unit":"kg","initial_stock":"100.000","need_ratio":"0.500000","need_type":"daily","ratio_basis":"person","expiration_date":"2027-11-21","created_by":1}
+{"name":"Beras","category":"PANGAN","stock_unit":"kg","initial_stock":100,"need_ratio":"0.500000","need_type":"HARIAN","ratio_basis":"orang/hari","expiration_date":"2027-11-21"}
 ```
 
-`initial_stock` opsional, default 0; `need_ratio`, `need_type`, `ratio_basis`, dan `expiration_date` opsional/boleh null. Jumlah stok menggunakan string desimal maksimal 3 angka di belakang koma; rasio maksimal 6 angka.
+`initial_stock` bilangan bulat ≥ 0 (default 0) dan otomatis dicatat sebagai mutasi `STOK_AWAL`. Mengubah `initial_stock` mencatat selisihnya sebagai `KOREKSI` dan ditolak (**422**) bila stok menjadi negatif. DELETE adalah soft delete; riwayat stok tetap.
 
 **`/api/shipments`**
 
 ```json
-{"disaster_id":1,"status":"draft","destination":"Posko Bandung","person_in_charge":"Petugas","request_key":"shipment-001","created_by":1}
+{"disaster_id":1,"shipped_at":"2026-11-21T08:00:00+07:00","destination":"Posko Bandung","person_in_charge":"Petugas","request_key":"shipment-001","items":[{"item_id":1,"quantity":10}]}
 ```
 
-`shipped_at` dan `received_at` opsional/boleh null. Timestamp wajib ISO 8601 dengan zona waktu. `received_at` memerlukan `shipped_at` dan tidak boleh mendahuluinya. `request_key` dan `created_by` tidak dapat diubah.
+Pengiriman, `shipment_items`, dan mutasi `PENGIRIMAN` ditulis dalam **satu transaksi** dengan baris barang dikunci. Status baru selalu `DIKIRIM`. Jika satu barang melebihi stok, pangan sudah kedaluwarsa, atau barang tidak ada, **seluruh pengiriman ditolak (422)**. Response dan detail menyertakan `items`.
 
-**`/api/shipment-items`**
-
-```json
-{"shipment_id":1,"item_id":1,"quantity":"10.125"}
-```
-
-Pasangan pengiriman/barang unik termasuk setelah soft delete. `shipment_id` dan `item_id` tidak dapat diubah melalui PATCH; hanya `quantity` yang dapat diperbarui.
+PATCH dapat mengubah field dan/atau mengganti seluruh `items`; selisih dicatat sebagai `KOREKSI`. Konfirmasi penerimaan: `{"status":"DITERIMA","received_at":"2026-11-22T10:00:00+07:00"}` (hanya dari `DIKIRIM`, `received_at` ≥ `shipped_at`, tidak di masa depan; stok tidak berubah). DELETE (soft) mengembalikan seluruh barang ke stok sebagai `KOREKSI`. `request_key` tetap unik setelah dihapus.
 
 **`/api/stock-receipts`**
 
 ```json
-{"item_id":1,"quantity":"50.000","receipt_date":"2026-11-21","source_giver":"Donatur","item_condition":"good","notes":"Donasi pangan","request_key":"receipt-001","created_by":1}
+{"item_id":1,"quantity":50,"receipt_date":"2026-11-21","source_giver":"Donatur","item_condition":"Baik","notes":"Donasi pangan","request_key":"receipt-001"}
 ```
 
-`notes` opsional/boleh null. `item_id`, `request_key`, dan `created_by` tidak dapat diubah.
-
-**`/api/stock-movements`**
-
-```json
-{"item_id":1,"receipt_id":1,"movement_type":"receipt","quantity_in":"50.000","movement_date":"2026-11-21","created_by":1}
-```
-
-Mutasi keluar menggunakan `quantity_out` dan dapat merujuk `shipment_item_id` serta `disaster_id`. Wajib tepat satu arah positif; arah lainnya default 0. Referensi penerimaan dan detail pengiriman tidak boleh diisi bersamaan. `notes` opsional/boleh null.
+`quantity` bilangan bulat > 0, otomatis dicatat sebagai `PENERIMAAN`. PATCH `quantity` mencatat selisih sebagai `KOREKSI`; PATCH/DELETE ditolak bila stok menjadi negatif (barang sudah terkirim). `item_id` dan `request_key` tidak dapat diubah.
 
 **`/api/generated-reports`**
 
 ```json
-{"disaster_id":1,"report_snapshot":{"title":"Laporan Banjir","items":[{"item_id":1,"quantity":"10.125"}]},"generated_by":1,"generated_by_name":"Petugas"}
+{"disaster_id":1,"report_snapshot":{"title":"Laporan Banjir","items":[{"item_id":1,"quantity":"10"}]}}
 ```
 
-API menyimpan snapshot object JSON yang dikirim caller; tidak menghitung/menghasilkan isi laporan otomatis. `generated_at` diisi database dan tidak diterima dari caller.
+API menyimpan snapshot object JSON yang dikirim caller (immutable). `generated_by`, `generated_by_name`, dan `generated_at` diisi dari token/database, dan audit `GENERATE_LAPORAN` ditulis dalam transaksi yang sama.
 
-**`/api/audit-logs`**
+### Aturan stok dan audit
 
-```json
-{"user_id":1,"action":"update","entity_type":"shipments","entity_id":1,"before_data":{"status":"draft"},"after_data":{"status":"shipped"}}
-```
-
-`before_data`/`after_data` opsional, berupa object JSON atau null. `occurred_at` diisi database. Referensi entity bersifat polimorfik dan tidak diperiksa sebagai foreign key.
-
-### Batasan alur operasional
-
-- Endpoint penerimaan/pengiriman **tidak otomatis membuat mutasi stok**, dan perubahan/soft delete dokumen tidak otomatis membalik mutasi. Pencatatan mutasi adalah operasi eksplisit melalui endpoint append-only; saldo stok dan larangan saldo negatif belum diimplementasikan.
-- Foreign key memastikan referensi ada, tetapi belum memvalidasi kesesuaian `item_id`/`disaster_id` mutasi terhadap dokumen sumber atau menolak referensi ke dokumen soft-deleted. Konsistensi lintas dokumen tersebut belum merupakan workflow otomatis.
-- API tidak otomatis membuat audit pada setiap perubahan dan tidak mengambil nama petugas/snapshot dari token. Jangan perlakukan audit/snapshot kiriman caller sebagai bukti tepercaya sebelum pencatatan server-side dan kontrol akses ditambahkan.
-- `created_by`, `request_key`, dan field relasi yang ditandai immutable di Swagger tidak dapat diubah. Field waktu otomatis tidak diterima pada request; exception adalah waktu kejadian bencana dan waktu pengiriman/penerimaan.
-- Error: **400** JSON tidak valid, **404** tidak ditemukan/operasi tidak tersedia, **409** konflik unique key atau hard delete yang masih direferensikan, **413** body melebihi 100 KB, **422** validasi/foreign key/constraint, **500** kesalahan internal.
+- **Stok terkini = SUM(`quantity_in`) − SUM(`quantity_out`)** pada `stock_movements` (AB-02). Mutasi hanya ditulis oleh API: `STOK_AWAL` (barang baru), `PENERIMAAN`, `PENGIRIMAN`, dan `KOREKSI` (perubahan/penghapusan). Tidak ada endpoint untuk menulis mutasi secara langsung.
+- Setiap operasi yang mengubah stok berjalan dalam satu transaksi database dan mengunci baris barang terkait, sehingga stok tidak pernah negatif meskipun ada request bersamaan.
+- Audit log ditulis otomatis dalam transaksi yang sama untuk setiap `UBAH` dan `HAPUS` pada akun, bencana, barang, pengiriman (beserta `items`), penerimaan, dan transaksi kas, serta `GENERATE_LAPORAN`. Password tidak pernah masuk audit.
+- `request_key` dan field relasi yang ditandai immutable di Swagger tidak dapat diubah. Field waktu otomatis tidak diterima pada request; exception adalah waktu kejadian bencana dan waktu pengiriman/penerimaan.
+- Error: **400** JSON tidak valid, **401** perubahan tanpa token yang valid, **403** bukan SUPERADMIN pada pengelolaan akun, **404** tidak ditemukan/operasi tidak tersedia, **409** konflik unique key atau hapus akun yang masih direferensikan, **413** body melebihi 100 KB, **422** validasi/stok/aturan bisnis/foreign key, **500** kesalahan internal.
 
 ## Pengujian
 
@@ -389,7 +368,7 @@ npm run db:migrate
 npm run test:integration
 ```
 
-Tes integrasi menggunakan PostgreSQL nyata, transaksi dan rollback untuk membersihkan fixture. Tes mencakup CRUD, ringkasan, nominal desimal, foreign key, key duplikat, dan soft delete. `schema.test.js` juga menjalankan seluruh migration dalam schema sementara yang di-rollback, memeriksa 10 tabel ERD, relasi, JSONB, presisi stok, dan constraint. `modules.test.js` menguji HTTP untuk seluruh modul tambahan, filter/paginasi, hashing password, konflik referensi, PATCH, hard/soft delete, serta proteksi riwayat append-only. Sequence PostgreSQL tetap dapat bertambah meskipun rollback. Jangan arahkan pengujian ke database produksi.
+Tes integrasi menggunakan PostgreSQL nyata, transaksi dan rollback untuk membersihkan fixture. Tes mencakup CRUD, ringkasan, nominal desimal, foreign key, key duplikat, dan soft delete. `schema.test.js` juga menjalankan seluruh migration dalam schema sementara yang di-rollback, memeriksa 10 tabel ERD, relasi, JSONB, presisi stok, dan constraint. `modules.test.js` menguji HTTP untuk seluruh modul, filter/paginasi, baca publik, role, stok turunan (STOK_AWAL, PENERIMAAN, PENGIRIMAN, KOREKSI), audit otomatis, PATCH, dan soft delete. `test/domain.test.js` menguji aturan stok, pengiriman atomik, role, dan audit tanpa database. Sequence PostgreSQL tetap dapat bertambah meskipun rollback. Jangan arahkan pengujian ke database produksi.
 
 ## Struktur
 
@@ -416,7 +395,7 @@ src/
     routes.js, controller.js, service.js, repository.js, validation.js
   audit-logs/
     routes.js, controller.js, service.js, repository.js, validation.js
-  shared/validation.js
+  shared/validation.js, transaction.js, domain.js
   docs/openapi.js, resource-openapi.js, resource-definitions.js
 scripts/
   migrate.js, seed.js

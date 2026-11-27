@@ -1,3 +1,5 @@
+import { domainTools } from '../shared/domain.js';
+
 const columns = 'id, disaster_id, report_snapshot, generated_by, generated_by_name, generated_at';
 
 function filters(query) {
@@ -14,6 +16,7 @@ function filters(query) {
 
 export function createRepository(db) {
   return {
+    ...domainTools(db, createRepository),
     async list(query) {
       const { where, values } = filters(query);
       const result = await db.query(
@@ -30,6 +33,9 @@ export function createRepository(db) {
     async find(id) {
       const result = await db.query(`SELECT ${columns} FROM generated_reports WHERE id = $1`, [id]);
       return result.rows[0];
+    },
+    async liveDisaster(id) {
+      return (await db.query('SELECT id FROM disasters WHERE id = $1 AND deleted_at IS NULL', [id])).rows[0];
     },
     async create(data) {
       const result = await db.query(
