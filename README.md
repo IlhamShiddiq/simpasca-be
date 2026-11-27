@@ -29,7 +29,7 @@ Migration `002_complete_erd.sql` menambahkan delapan tabel tanpa mengubah migrat
 | `stock_receipts` | `item_id` → inventory_items; `created_by` → users |
 | `stock_movements` | `item_id` → inventory_items; `disaster_id` → disasters; `receipt_id` → stock_receipts; `shipment_item_id` → shipment_items; `created_by` → users |
 | `generated_reports` | `disaster_id` → disasters; `generated_by` → users |
-| `cash_transactions` | `created_by` → users |
+| `cash_transactions` | `created_by` → users, `disaster_id` → disasters (opsional), `receipt_id` → stock_receipts (opsional) |
 | `audit_logs` | `user_id` → users; `entity_type` + `entity_id` adalah referensi polimorfik, bukan foreign key |
 
 Asumsi implementasi untuk detail yang tidak ditentukan ERD:
@@ -235,7 +235,9 @@ curl 'http://localhost:3000/api/cash-transactions/summary?date_from=2026-11-01&d
 
 Tanggal batas bersifat inklusif. Daftar diurutkan `transaction_date DESC, id DESC`. Default `page=1`, `limit=20`, maksimal limit 100. Meta: `page`, `limit`, `total`, `total_pages`.
 
-Summary mendukung filter `type`, `date_from`, `date_to`; paginasi tidak membatasi perhitungan summary. Tanpa filter menghitung seluruh transaksi aktif. Dengan filter `type`, saldo hanya mencerminkan jenis yang dipilih.
+**Tautan opsional:** `disaster_id` (bencana yang dibiayai/didanai) dan `receipt_id` (penerimaan barang yang dibayar, hanya untuk `expense`). Keduanya boleh null dan harus merujuk data yang belum dihapus. Gunakan `?disaster_id=` pada daftar atau summary untuk melihat kas satu bencana.
+
+Summary mendukung filter `type`, `date_from`, `date_to`, `disaster_id`, `receipt_id`; paginasi tidak membatasi perhitungan summary. Tanpa filter menghitung seluruh transaksi aktif. Dengan filter `type`, saldo hanya mencerminkan jenis yang dipilih.
 
 ```json
 {

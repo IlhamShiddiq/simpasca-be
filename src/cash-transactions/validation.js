@@ -1,12 +1,14 @@
 import { HttpError } from '../errors.js';
 
 const fail = (message) => { throw new HttpError(422, message); };
-const fields = ['type', 'amount', 'description', 'transaction_date', 'request_key', 'created_by'];
+const fields = ['type', 'amount', 'description', 'transaction_date', 'request_key', 'created_by', 'disaster_id', 'receipt_id'];
+const optional = ['description', 'disaster_id', 'receipt_id'];
+const links = ['disaster_id', 'receipt_id'];
 
 export function positiveId(value, field = 'id') {
   if (!['string', 'number'].includes(typeof value)
       || !/^[1-9]\d*$/.test(String(value)) || !Number.isSafeInteger(Number(value))
-      || (['id', 'created_by'].includes(field) && Number(value) > 2147483647)) {
+      || (['id', 'created_by', ...links].includes(field) && Number(value) > 2147483647)) {
     fail(`${field} harus berupa integer positif yang aman.`);
   }
   return Number(value);
@@ -28,7 +30,7 @@ export function validateBody(body, partial = false) {
   if (partial && Object.keys(body).length === 0) fail('Minimal satu field harus diisi.');
   const result = {};
   if (!partial) {
-    for (const key of fields.filter((field) => field !== 'description')) {
+    for (const key of fields.filter((field) => !optional.includes(field))) {
       if (body[key] === undefined) fail(`${key} wajib diisi.`);
     }
   }
@@ -58,11 +60,14 @@ export function validateBody(body, partial = false) {
     result.request_key = body.request_key.trim();
   }
   if (body.created_by !== undefined) result.created_by = positiveId(body.created_by, 'created_by');
+  for (const key of links) {
+    if (body[key] !== undefined) result[key] = body[key] === null ? null : positiveId(body[key], key);
+  }
   return result;
 }
 
 export function validateQuery(query) {
-  const allowed = ['page', 'limit', 'type', 'date_from', 'date_to'];
+  const allowed = ['page', 'limit', 'type', 'date_from', 'date_to', ...links];
   if (Object.keys(query).some((key) => !allowed.includes(key))) fail('Parameter query tidak dikenal.');
   for (const value of Object.values(query)) {
     if (typeof value !== 'string') fail('Parameter query tidak boleh berulang atau berbentuk object.');
@@ -75,6 +80,9 @@ export function validateQuery(query) {
   }
   for (const key of ['date_from', 'date_to']) {
     if (query[key] !== undefined) result[key] = date(query[key], key);
+  }
+  for (const key of links) {
+    if (query[key] !== undefined) result[key] = positiveId(query[key], key);
   }
   if (result.date_from && result.date_to && result.date_from > result.date_to) fail('date_from tidak boleh melebihi date_to.');
   return result;

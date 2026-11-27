@@ -19,11 +19,15 @@ const editable = {
   },
   description: { type: 'string', nullable: true, maxLength: 5000, example: 'Donasi bantuan bencana' },
   transaction_date: { type: 'string', format: 'date', example: '2026-11-14' },
+  disaster_id: { ...id, nullable: true, description: 'Opsional: bencana yang dibiayai/didanai. Harus bencana yang belum dihapus.' },
+  receipt_id: { ...id, nullable: true, description: 'Opsional, hanya expense: penerimaan barang yang dibayar dengan transaksi ini.' },
 };
 const filters = [
   { name: 'type', in: 'query', schema: editable.type, description: 'Filter jenis transaksi.' },
   { name: 'date_from', in: 'query', schema: { type: 'string', format: 'date' }, description: 'Tanggal awal inklusif, tidak boleh melewati date_to.' },
   { name: 'date_to', in: 'query', schema: { type: 'string', format: 'date' }, description: 'Tanggal akhir inklusif.' },
+  { name: 'disaster_id', in: 'query', schema: id, description: 'Filter transaksi untuk satu bencana (juga pada summary).' },
+  { name: 'receipt_id', in: 'query', schema: id, description: 'Filter transaksi untuk satu penerimaan barang.' },
 ];
 const pagination = [
   { name: 'page', in: 'query', schema: { type: 'integer', minimum: 1, default: 1 } },
@@ -134,7 +138,7 @@ export const openapi = {
       },
       CashTransaction: {
         type: 'object',
-        required: ['id', 'type', 'amount', 'description', 'transaction_date', 'request_key', 'created_by', 'created_at', 'updated_at', 'deleted_at'],
+        required: ['id', 'type', 'amount', 'description', 'transaction_date', 'request_key', 'created_by', 'disaster_id', 'receipt_id', 'created_at', 'updated_at', 'deleted_at'],
         properties: {
           ...editable, id, amount: money,
           request_key: { type: 'string', example: 'donasi-20261114-001' }, created_by: id,

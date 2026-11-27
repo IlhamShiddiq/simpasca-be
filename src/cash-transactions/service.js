@@ -7,6 +7,14 @@ function found(row) {
   return row;
 }
 
+/** Links must point at live rows; only an expense can pay for a stock receipt. */
+async function checkLinks(tx, data, before = {}) {
+  const merged = { ...before, ...data };
+  if (merged.receipt_id && merged.type !== 'expense') throw new HttpError(422, 'receipt_id hanya untuk transaksi expense.');
+  if (data.disaster_id && !(await tx.liveDisaster(data.disaster_id))) throw new HttpError(422, 'Bencana tidak ditemukan atau sudah dihapus.');
+  if (data.receipt_id && !(await tx.liveReceipt(data.receipt_id))) throw new HttpError(422, 'Penerimaan barang tidak ditemukan atau sudah dihapus.');
+}
+
 export function createService(repository) {
   return {
     async list(query) {
@@ -16,7 +24,9 @@ export function createService(repository) {
     },
     async find(id) { return found(await repository.find(positiveId(id))); },
     async create(body, actor) {
-      return repository.create(validateBody({ ...withoutClientFields(body, ['created_by']), created_by: actorOf(actor).id }));
+      const data = validateBody({ ...withoutClientFields(body, ['created_by']), created_by: actorOf(actor).id });
+      await checkLinks(repository, data);
+      return repository.create(data);
     },
     /** Audited (KF-09.1). */
     async update(id, body, actor) {
@@ -25,6 +35,7 @@ export function createService(repository) {
       const { id: userId } = actorOf(actor);
       return repository.transaction(async (tx) => {
         const before = found(await tx.find(cashId));
+        await checkLinks(tx, data, before);
         const after = found(await tx.update(cashId, data));
         await tx.audit({ userId, action: 'UBAH', entityType: 'cash_transactions', entityId: cashId, before, after });
         return after;
